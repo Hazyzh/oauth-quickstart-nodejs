@@ -124,10 +124,10 @@ const exchangeForTokens = async (userId, exchangeProof) => {
     refreshTokenStore[userId] = tokens.refresh_token;
     accessTokenCache.set(userId, tokens.access_token, Math.round(tokens.expires_in * 0.75));
 
-    console.log('       > Received an access token and refresh token');
+    console.log('> Received an access token and refresh token');
     return tokens.access_token;
   } catch (e) {
-    console.error(`       > Error exchanging ${exchangeProof.grant_type} for access token`);
+    console.error(`> Error exchanging ${exchangeProof.grant_type} for access token`);
     return JSON.parse(e.response.body);
   }
 };
@@ -157,11 +157,8 @@ const isAuthorized = (userId) => {
   return refreshTokenStore[userId] ? true : false;
 };
 
-//====================================================//
-//   Using an Access Token to Query the HubSpot API   //
-//====================================================//
 
-const getContact = async (accessToken) => {
+const getAccountInfo = async (accessToken) => {
   console.log('');
   console.log('=== Retrieving a contact from HubSpot using the access token ===');
   try {
@@ -170,39 +167,37 @@ const getContact = async (accessToken) => {
       'Content-Type': 'application/json'
     };
     console.log('===> Replace the following request.get() to test other API calls');
-    console.log('===> request.get(\'https://api.hubapi.com/contacts/v1/lists/all/contacts/all?count=1\')');
-    const result = await request.get('https://api.hubapi.com/contacts/v1/lists/all/contacts/all?count=1', {
+    const result = await request.get('https://api.hubapi.com/account-info/v3/details', {
       headers: headers
     });
 
-    return JSON.parse(result).contacts[0];
+    const data = JSON.parse(result);
+    console.log('Account details:', data);
+    return data;
   } catch (e) {
     console.error('  > Unable to retrieve contact');
     return JSON.parse(e.response.body);
   }
-};
+}
 
-//========================================//
-//   Displaying information to the user   //
-//========================================//
-
-const displayContactName = (res, contact) => {
-  if (contact.status === 'error') {
-    res.write(`<p>Unable to retrieve contact! Error Message: ${contact.message}</p>`);
+const displayAccountDetail = (res, accountInfo) => {
+  if (accountInfo.status === 'error') {
+    res.write(`<p>Unable to display account detail! Error Message: ${contact.message}</p>`);
     return;
   }
-  const { firstname, lastname } = contact.properties;
-  res.write(`<p>Contact name: ${firstname.value} ${lastname.value}</p>`);
+  const { portalId, uiDomain} = accountInfo;
+  const url =  `https://${uiDomain}/settings/${portalId}/user-preferences/calling`
+  res.write(`<p> Go to settings page, select Calling Provide to using app. <a target="_blank" href="${url}"> Hub Settings </a> </p>`);
 };
 
 app.get('/', async (req, res) => {
   res.setHeader('Content-Type', 'text/html');
-  res.write(`<h2>HubSpot OAuth 2.0 Quickstart App</h2>`);
   if (isAuthorized(req.sessionID)) {
     const accessToken = await getAccessToken(req.sessionID);
-    const contact = await getContact(accessToken);
-    res.write(`<h4>Access token: ${accessToken}</h4>`);
-    displayContactName(res, contact);
+    const accountInfo = await getAccountInfo(accessToken);
+    res.write(`<h3> Install Succeed !</h3>`);
+    // res.write(`<h4>Access token: ${accessToken}</h4>`);
+    displayAccountDetail(res, accountInfo);
   } else {
     res.write(`<a href="/install"><h3>Install the app</h3></a>`);
   }
