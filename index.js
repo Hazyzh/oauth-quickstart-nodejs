@@ -12,7 +12,7 @@ const refreshTokenStore = {};
 const accessTokenCache = new NodeCache({ deleteOnExpire: true });
 
 if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) {
-    throw new Error('Missing CLIENT_ID or CLIENT_SECRET environment variable.')
+  throw new Error('Missing CLIENT_ID or CLIENT_SECRET environment variable.');
 }
 
 //===========================================================================//
@@ -23,7 +23,7 @@ if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) {
 //  installing. If they don't match your app's configuration, users will
 //  see an error page.
 
-// Replace the following with the values from your app auth config, 
+// Replace the following with the values from your app auth config,
 // or set them as environment variables before running.
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
@@ -32,21 +32,23 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 // To request others, set the SCOPE environment variable instead
 let SCOPES = ['crm.objects.contacts.read'];
 if (process.env.SCOPE) {
-    SCOPES = (process.env.SCOPE.split(/ |, ?|%20/)).join(' ');
+  SCOPES = process.env.SCOPE.split(/ |, ?|%20/).join(' ');
 }
 
 // On successful install, users will be redirected to /oauth-callback
-const REDIRECT_URI = `http://localhost:${PORT}/oauth-callback`;
+const REDIRECT_URI = process.env.REDIRECT_URI || `http://localhost:${PORT}/oauth-callback`;
 
 //===========================================================================//
 
 // Use a session to keep track of client ID
-app.use(session({
-  secret: Math.random().toString(36).substring(2),
-  resave: false,
-  saveUninitialized: true
-}));
- 
+app.use(
+  session({
+    secret: Math.random().toString(36).substring(2),
+    resave: false,
+    saveUninitialized: true,
+  })
+);
+
 //================================//
 //   Running the OAuth 2.0 Flow   //
 //================================//
@@ -86,25 +88,28 @@ app.get('/oauth-callback', async (req, res) => {
   // required values and exchange both for an access token and a refresh token
   if (req.query.code) {
     console.log('       > Received an authorization token');
-
+    console.log(req.query.code);
     const authCodeProof = {
       grant_type: 'authorization_code',
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       redirect_uri: REDIRECT_URI,
-      code: req.query.code
+      code: req.query.code,
     };
 
     // Step 4
     // Exchange the authorization code for an access token and refresh token
-    console.log('===> Step 4: Exchanging authorization code for an access token and refresh token');
+    console.log(
+      '===> Step 4: Exchanging authorization code for an access token and refresh token'
+    );
     const token = await exchangeForTokens(req.sessionID, authCodeProof);
+
     if (token.message) {
       return res.redirect(`/error?msg=${token.message}`);
     }
 
-    // Once the tokens have been retrieved, use them to make a query
-    // to the HubSpot API
+    // // Once the tokens have been retrieved, use them to make a query
+    // // to the HubSpot API
     res.redirect(`/`);
   }
 });
@@ -115,19 +120,28 @@ app.get('/oauth-callback', async (req, res) => {
 
 const exchangeForTokens = async (userId, exchangeProof) => {
   try {
-    const responseBody = await request.post('https://api.hubapi.com/oauth/v1/token', {
-      form: exchangeProof
-    });
+    const responseBody = await request.post(
+      'https://api.hubapi.com/oauth/v1/token',
+      {
+        form: exchangeProof,
+      }
+    );
     // Usually, this token data should be persisted in a database and associated with
     // a user identity.
     const tokens = JSON.parse(responseBody);
     refreshTokenStore[userId] = tokens.refresh_token;
-    accessTokenCache.set(userId, tokens.access_token, Math.round(tokens.expires_in * 0.75));
+    accessTokenCache.set(
+      userId,
+      tokens.access_token,
+      Math.round(tokens.expires_in * 0.75)
+    );
 
     console.log('> Received an access token and refresh token');
     return tokens.access_token;
   } catch (e) {
-    console.error(`> Error exchanging ${exchangeProof.grant_type} for access token`);
+    console.error(
+      `> Error exchanging ${exchangeProof.grant_type} for access token`
+    );
     return JSON.parse(e.response.body);
   }
 };
@@ -138,7 +152,7 @@ const refreshAccessToken = async (userId) => {
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,
     redirect_uri: REDIRECT_URI,
-    refresh_token: refreshTokenStore[userId]
+    refresh_token: refreshTokenStore[userId],
   };
   return await exchangeForTokens(userId, refreshTokenProof);
 };
@@ -157,19 +171,25 @@ const isAuthorized = (userId) => {
   return refreshTokenStore[userId] ? true : false;
 };
 
-
 const getAccountInfo = async (accessToken) => {
   console.log('');
-  console.log('=== Retrieving a contact from HubSpot using the access token ===');
+  console.log(
+    '=== Retrieving a contact from HubSpot using the access token ==='
+  );
   try {
     const headers = {
       Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     };
-    console.log('===> Replace the following request.get() to test other API calls');
-    const result = await request.get('https://api.hubapi.com/account-info/v3/details', {
-      headers: headers
-    });
+    console.log(
+      '===> Replace the following request.get() to test other API calls'
+    );
+    const result = await request.get(
+      'https://api.hubapi.com/account-info/v3/details',
+      {
+        headers: headers,
+      }
+    );
 
     const data = JSON.parse(result);
     console.log('Account details:', data);
@@ -178,16 +198,24 @@ const getAccountInfo = async (accessToken) => {
     console.error('  > Unable to retrieve contact');
     return JSON.parse(e.response.body);
   }
-}
+};
 
 const displayAccountDetail = (res, accountInfo) => {
   if (accountInfo.status === 'error') {
-    res.write(`<p>Unable to display account detail! Error Message: ${contact.message}</p>`);
+    res.write(
+      `<p>Unable to display account detail! Error Message: ${contact.message}</p>`
+    );
     return;
   }
-  const { portalId, uiDomain} = accountInfo;
-  const url =  `https://${uiDomain}/settings/${portalId}/user-preferences/calling`
-  res.write(`<p> Go to settings page, select Calling Provide to using app. <a target="_blank" href="${url}"> Hub Settings </a> </p>`);
+  const { portalId, uiDomain } = accountInfo;
+  const url = `https://${uiDomain}/settings/${portalId}/user-preferences/calling`;
+  res.write(
+    `<p> Go to settings page, select Calling Provide to using app. <a target="_blank" href="${url}"> Hub Settings </a> </p>`
+  );
+  res.write(
+    `<p><a href="/install"><h3>Reinstall the app</h3></a></p>`
+  );
+  res.end();
 };
 
 app.get('/', async (req, res) => {
@@ -210,5 +238,7 @@ app.get('/error', (req, res) => {
   res.end();
 });
 
-app.listen(PORT, () => console.log(`=== Starting your app on http://localhost:${PORT} ===`));
+app.listen(PORT, () =>
+  console.log(`=== Starting your app on http://localhost:${PORT} ===`)
+);
 opn(`http://localhost:${PORT}`);
